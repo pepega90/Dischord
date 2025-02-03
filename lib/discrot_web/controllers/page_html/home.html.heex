@@ -1,0 +1,395 @@
+ <!-- Login Screen -->
+    <div id="login-screen" class="flex items-center justify-center h-screen">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h2 class="text-2xl font-bold mb-6 text-center text-discord-blue">Welcome to DisChord</h2>
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                    <input type="text" id="username" name="username" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-discord-blue focus:border-discord-blue">
+                </div>
+                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-discord-blue hover:bg-discord-light-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-discord-blue">
+                    Enter Chat
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Chat Interface (Initially Hidden) -->
+    <div id="chat-interface" class="hidden">
+        <div id="app" class="flex h-screen">
+            <!-- Server List -->
+            <div class="w-16 bg-gray-200 p-3 flex flex-col items-center">
+                <div id="servers-list" class="space-y-4">
+                    <!-- Servers will be populated here -->
+                </div>
+                <button id="add-server" class="mt-4 w-12 h-12 rounded-full bg-discord-blue text-white hover:bg-discord-light-blue flex items-center justify-center">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+
+            <!-- Channels and DMs -->
+            <div class="w-60 bg-gray-100 flex flex-col border-r border-gray-300">
+                <div id="server-header" class="p-4 bg-gray-200 font-bold text-discord-blue"></div>
+                <div class="flex-1 overflow-y-auto">
+                    <div class="p-4">
+                        <h2 class="text-gray-600 uppercase text-sm mb-2">Text Channels</h2>
+                        <div id="channels-list" class="space-y-1">
+                            <!-- Channels will be populated here -->
+                        </div>
+                    </div>
+                    <div class="p-4">
+                        <h2 class="text-gray-600 uppercase text-sm mb-2">Direct Messages</h2>
+                        <div id="dms-list" class="space-y-1">
+                            <!-- DMs will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Chat Area -->
+            <div class="flex-1 flex flex-col bg-white">
+                <div id="chat-header" class="bg-white text-gray-800 p-4 border-b border-gray-300">
+                    <h2 class="text-xl font-bold">Select a channel or DM</h2>
+                </div>
+                
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                    <!-- Messages will be populated here -->
+                </div>
+                
+                <form id="message-form" class="p-4 bg-gray-100">
+                    <input type="text" id="message-input" class="w-full p-2 rounded bg-white text-gray-800 border border-gray-300" placeholder="Type a message...">
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for adding a new server -->
+    <div id="add-server-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg">
+            <h2 class="text-xl font-bold mb-4 text-gray-800">Create a New Server</h2>
+            <input type="text" id="new-server-name" class="w-full p-2 rounded bg-gray-100 text-gray-800 border border-gray-300 mb-4" placeholder="Enter server name">
+            <div class="flex justify-end">
+                <button id="cancel-server" class="px-4 py-2 bg-gray-200 text-gray-800 rounded mr-2">Cancel</button>
+                <button id="create-server" class="px-4 py-2 bg-discord-blue text-white rounded">Create</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+  window.addEventListener("DOMContentLoaded", () => {
+    let publicChan = null;
+    let privateChan = null;
+
+    let currentServer = null;
+
+    const listUser = document.getElementById('dms-list');
+    listUser.innerHTML = "";
+
+    const listServer = document.getElementById("servers-list");
+    listServer.innerHTML = "";
+
+    const listChan = document.getElementById('channels-list');
+    listChan.innerHTML = "";
+
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.innerHTML = '';
+
+    document.getElementById('login-form').onsubmit = (e) => {
+        e.preventDefault();
+        const usernameInput = document.getElementById('username');
+        currentUsername = usernameInput.value.trim();
+        if (currentUsername) {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('chat-interface').classList.remove('hidden');
+
+            // Bergabung ke channel public
+            publicChan = window.socket.channel("room:lobby", {});
+            publicChan.join().receive("ok", resp => {
+                console.log("Joined general room");
+            });
+
+            // Push user baru ke channel
+            publicChan.push("newUser", {
+                username: currentUsername
+            });
+
+            // Mendengarkan daftar pengguna
+            publicChan.on("list_user", ({ data }) => {
+                if (data) {
+                    listUser.innerHTML = ""; // Reset list user
+                    for (let i = 0; i < data.length; i++) {
+                        if (data[i].user)
+                            addNewUser(data[i].user);
+                    }
+                }
+            });
+
+            publicChan.on("list_server", ({data: list_server}) => {
+                listServer.innerHTML = "";
+                if(list_server) {
+                    for(let i =0; i < list_server.length; i++) {
+                        if(list_server[i]) {
+                            const div = document.createElement('div');
+                            div.className = 'w-12 h-12 rounded-full bg-discord-blue text-white hover:bg-discord-light-blue flex items-center justify-center cursor-pointer mb-4';
+                            div.textContent = list_server[i].icon;
+                            currentServer = list_server[i].id;
+                            div.onclick = () => selectServer(list_server[i]);
+                            listServer.appendChild(div);
+                        }
+                    }
+                }
+            })
+
+            publicChan.on("list_channels", ({data}) => {
+                let chans = data[currentServer]
+                for(let i =0; i < chans.length; i++) {
+                    const divChan = document.createElement('div');
+                    divChan.className = 'text-gray-600 hover:text-discord-blue cursor-pointer';
+                    divChan.textContent = `# ${chans[i].name}`;
+                    listChan.appendChild(divChan);
+                }
+            })
+
+
+                // Mendengarkan pengguna baru bergabung
+                publicChan.on("newUser", (data) => {
+                    addNewUser(data.newUser);
+                });
+
+            }
+        };
+
+    document.getElementById('add-server').onclick = () => {
+            if (publicChan) {
+        // Leave the previous private chat room
+            publicChan.leave()
+            .receive("ok", () => {
+                console.log("Left channel");
+            })
+            .receive("error", () => {
+                console.log("Error leaving channel");
+            });
+        }
+
+        publicChan = window.socket.channel("room:lobby", {});
+        publicChan.join().receive("ok", resp => {
+                console.log("Joined general room");
+            });
+        document.getElementById('add-server-modal').classList.remove('hidden');
+    };
+
+    document.getElementById('create-server').onclick = () => {
+        const serverName = document.getElementById('new-server-name').value;
+        if (serverName.trim()) {
+            publicChan.push("new_server", {
+                name: serverName,
+                icon: serverName[0].toUpperCase()
+            });
+            document.getElementById('add-server-modal').classList.add('hidden');
+            document.getElementById('new-server-name').value = '';
+        }
+
+        publicChan.on("list_server", ({data: list_server}) => {
+                listServer.innerHTML = "";
+                if(list_server) {
+                    for(let i = 0; i < list_server.length; i++) {
+                        if(list_server[i]) {
+                            const div = document.createElement('div');
+                            div.className = 'w-12 h-12 rounded-full bg-discord-blue text-white hover:bg-discord-light-blue flex items-center justify-center cursor-pointer mb-4';
+                            div.textContent = list_server[i].icon;
+                            currentServer = list_server[i].id;
+                            div.onclick = () => selectServer(list_server[i]);
+                            listServer.appendChild(div);
+                        }
+                    }
+                }
+            })
+
+    };
+
+
+    function selectServer(server_data) {
+        if (publicChan) {
+        // Leave the previous private chat room
+            publicChan.leave()
+            .receive("ok", () => {
+                console.log("Left previous private channel");
+            })
+            .receive("error", () => {
+                console.log("Error leaving previous private channel");
+            });
+        }
+
+        chatMessages.innerHTML = "";
+
+        publicChan = window.socket.channel(`room:${server_data.name}`, {});
+
+        publicChan.join()
+            .receive("ok", resp => {
+                console.log(`Joined private room with ${server_data.name}`);
+                publicChan.push("fetch_messages", { server_id: server_data.id});
+                publicChan.push("join_notif", {server_name: server_data.name, username: currentUsername})
+            })
+            .receive("error", resp => { 
+            console.log("Unable to join private room"); 
+            });
+
+            document.getElementById('server-header').textContent = server_data.name;
+        
+
+         publicChan.on("message", ({text, sender}) => {
+                appendMessage(sender, text);
+            })
+
+         publicChan.on("notif_join", ({ server_name, username }) => {
+            const notifJoinDiv = document.createElement('div');
+            notifJoinDiv.className = 'flex items-center justify-center mx-auto my-4 text-gray-500 text-sm';
+             notifJoinDiv.innerHTML = `
+                <div class="flex items-center w-full">
+                    <div class="flex-grow border-t border-gray-300"></div>
+                    <span class="px-4 text-gray-500 whitespace-nowrap">
+                        <span class="font-bold text-blue-500">${username}</span> 
+                        has joined the room 
+                        <span class="italic text-gray-600">${server_name}</span>
+                    </span>
+                    <div class="flex-grow border-t border-gray-300"></div>
+                </div>
+            `;
+            chatMessages.appendChild(notifJoinDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
+
+        publicChan.on("load_messages", ({messages}) => {
+                if (messages) {
+                    messages.forEach(({sender, text}) => {
+                        appendMessage(sender, text);
+                    });
+                }
+            });
+
+        // Handle message submission
+        document.getElementById('message-form').onsubmit = (e) => {
+            e.preventDefault();
+            const input = document.getElementById('message-input');
+            if (input.value.trim()) {
+                const newMessage = {
+                    sender: currentUsername,
+                    text: input.value,
+                    server_id: server_data.id
+                }
+                publicChan.push("message", newMessage)
+                input.value = '';
+            }
+        };
+    }
+
+    function appendMessage(sender, text) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'mb-4';
+        messageDiv.innerHTML = `<span class="font-bold text-discord-blue">${sender}:</span> <span>${text}</span>`;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addNewUser(username) {
+        const div = document.createElement("div");
+        div.className = "flex items-center space-x-2 p-2 hover:bg-gray-200 rounded";
+        div.innerHTML = `
+            <div class="h-8 w-8 bg-discord-blue text-white flex items-center justify-center rounded-full">
+                ${username.charAt(0).toUpperCase()}
+            </div>
+            <span>${username}</span>
+        `;
+        div.onclick = () => selectChat(username);
+        listUser.appendChild(div);
+    }
+
+    function selectChat(username) {
+            document.getElementById('chat-header').innerHTML = `<h2 class="text-xl font-bold text-discord-blue">Chat with ${username}</h2>`;
+            chatMessages.innerHTML = ""; // Clear previous messages
+
+            // Leave the current channel if already in one
+            if (privateChan) {
+                privateChan.leave()
+                    .receive("ok", () => {
+                        console.log("Left the previous channel");
+                    })
+                    .receive("error", () => {
+                        console.log("Error leaving the previous channel");
+                    });
+            }
+
+            // Join the new DM channel
+            const channelName = `dm:${[currentUsername, username].sort().join(":")}`;
+
+            privateChan = window.socket.channel(channelName, {});
+
+            privateChan.join()
+                .receive("ok", resp => {
+                    console.log(`Joined DM channel with ${username}`);
+                    privateChan.push("fetch_dm_history", {});
+                })
+                .receive("error", resp => {
+                    console.log("Unable to join DM channel");
+                });
+
+            // Handle receiving DM history
+            privateChan.on("dm_history", ({ messages }) => {
+                if (messages) {
+                    messages.forEach(({ sender, text }) => {
+                        appendDM(sender, text);
+                    });
+                }
+            });
+
+            // Handle receiving new DM messages
+            privateChan.on("new_dm", ({ sender, text }) => {
+                appendDM(sender, text);
+            });
+
+            // Handle sending DM messages
+            document.getElementById('message-form').onsubmit = (e) => {
+                e.preventDefault();
+                const input = document.getElementById('message-input');
+                if (input.value.trim()) {
+                    const newMessage = {
+                        sender: currentUsername,
+                        text: input.value
+                    };
+                    privateChan.push("send_dm", newMessage);
+                    appendDM(currentUsername, input.value); // Show the message immediately
+                    input.value = '';
+                }
+            };
+
+        }
+
+        function appendDM(sender, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'mb-4 flex';
+
+            // Check if the message is sent by the current user
+            if (sender === currentUsername) {
+                messageDiv.classList.add('justify-end'); // Align to the right
+                messageDiv.innerHTML = `
+                    <div class="bg-discord-blue text-white p-2 rounded-md max-w-xs">
+                        <span>${text}</span>
+                    </div>
+                `;
+            } else {
+                messageDiv.classList.add('justify-start'); // Align to the left
+                messageDiv.innerHTML = `
+                    <div class="bg-gray-200 text-gray-800 p-2 rounded-md max-w-xs">
+                        <span class="font-bold text-discord-blue">${sender}:</span>
+                        <span>${text}</span>
+                    </div>
+                `;
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to the bottom
+        }
+
+});
+
+</script>

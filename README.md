@@ -1,4 +1,6 @@
-# Discrot
+# Dischord
+
+https://github.com/user-attachments/assets/55ed8e88-0585-4968-8108-f05b57ab8163
 
 To start your Phoenix server:
 
